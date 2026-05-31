@@ -1,0 +1,15 @@
+LICENSE PLACEHOLDER
+
+This file is a placeholder applied by the Cinatra extension extraction script
+ONLY when the source package does not already ship a LICENSE file.
+
+The effective license for this extension is recorded in the package.json
+"license" field. The extraction script maps it as follows:
+
+  - wordpress-agent, drupal-agent  -> GPL-2.0-or-later
+  - every other extracted extension -> the source package.json "license",
+                                        defaulting to Apache-2.0
+
+Before publishing, replace this placeholder with the full, verbatim text of the
+license named in package.json (the SPDX-standard license body — e.g. the full
+Apache License 2.0 text, or the GNU General Public License v2 text).
