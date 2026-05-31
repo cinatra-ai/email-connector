@@ -29,9 +29,14 @@ jobs:
         run: corepack enable
 
       - name: Install dependencies
-        # Extracted repos ship NO committed lockfile, so resolve fresh rather
-        # than fail on a frozen lockfile.
+        # Extracted repos ship NO committed lockfile. pnpm forces
+        # `frozen-lockfile` whenever the `CI` env var is set, which overrides the
+        # `--no-frozen-lockfile` flag and fails with ERR_PNPM_NO_LOCKFILE. Setting
+        # `npm_config_frozen_lockfile=false` is the unambiguous override that wins
+        # while keeping CI=true for every other step.
         run: corepack pnpm install --no-frozen-lockfile
+        env:
+          npm_config_frozen_lockfile: "false"
 
       - name: Typecheck
         # Always run a REAL typecheck. `pnpm run --if-present` exits 0 when the
