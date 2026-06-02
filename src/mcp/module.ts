@@ -12,8 +12,22 @@ import "server-only";
 // ---------------------------------------------------------------------------
 
 import { z } from "zod";
-import type { McpRuntimeToolServer } from "@cinatra-ai/mcp-server";
 import { sendEmailThroughSystem } from "../facade";
+
+// Structural tool-server type — the narrow `registerTool` surface this module
+// uses. Kept STRUCTURAL (not imported from `@cinatra-ai/mcp-server`) so the
+// connector depends only on the SDK; the host's real `McpRuntimeToolServer`,
+// which `src/lib/mcp-server.ts` passes to `createEmailModule`, satisfies it.
+// The canonical IoC registration path is `register(ctx)` (see ../register.ts);
+// this host-static module remains the production-serving path until the host→connector cutover
+// retires it (the registrations dedupe by tool name).
+type EmailToolServer = {
+  // Permissive on purpose: the host's real `McpRuntimeToolServer.registerTool`
+  // is an overloaded signature, so the structural type must be a supertype it
+  // satisfies. The single call site below passes (name, config, handler).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  registerTool(...args: any[]): unknown;
+};
 
 const emailSendInputSchema = z.object({
   to: z.array(z.string().min(1)).min(1),
@@ -33,7 +47,15 @@ const emailSendInputSchema = z.object({
   senderIdentityId: z.string().optional(),
 });
 
-export function registerEmailPrimitives(server: McpRuntimeToolServer): void {
+/**
+ * Resolves the TRUSTED human subject `{ userId, orgId }` for the current
+ * invocation. The host injects this (it reads the request/run context store);
+ * the connector must NOT read the MCP SDK `extra` arg, which the host transport
+ * does not populate with an actor.
+ */
+export type EmailSendActorResolver = () => Promise<{ userId?: string; orgId?: string }>;
+
+export function registerEmailPrimitives(server: EmailToolServer, resolveActor?: EmailSendActorResolver): void {
   server.registerTool(
     "email_send",
     {
@@ -45,12 +67,13 @@ export function registerEmailPrimitives(server: McpRuntimeToolServer): void {
         "and any future provider (SMTP, SES, Outlook) the operator registers.",
       inputSchema: emailSendInputSchema,
     },
-    async (rawInput, extra) => {
+    async (rawInput) => {
       const input = emailSendInputSchema.parse(rawInput);
-      const actor = (extra as { actor?: Record<string, unknown> })?.actor;
-      // Treat ""/whitespace as absent so a blank actor.userId/orgId doesn't
-      // run a doomed sender-identity lookup with ownerId="" (which finds
-      // nothing and just wastes a round-trip before falling through).
+      // Resolve the trusted actor from the request/run context via the
+      // host-injected resolver (NOT the MCP SDK `extra`, which carries no actor).
+      const actor = resolveActor ? await resolveActor() : {};
+      // Treat ""/whitespace as absent so a blank userId/orgId doesn't run a
+      // doomed sender-identity lookup with ownerId="".
       const nonEmpty = (v: unknown): string | undefined =>
         typeof v === "string" && v.trim().length > 0 ? v : undefined;
       const userId = nonEmpty(actor?.userId);
@@ -94,8 +117,8 @@ export function registerEmailPrimitives(server: McpRuntimeToolServer): void {
  * this from `@cinatra-ai/email-connector/mcp-module` and wires it in
  * `src/lib/mcp-server.ts`.
  */
-export function createEmailModule() {
+export function createEmailModule(deps?: { resolveActor?: EmailSendActorResolver }) {
   return {
-    registerCapabilities: registerEmailPrimitives,
+    registerCapabilities: (server: EmailToolServer) => registerEmailPrimitives(server, deps?.resolveActor),
   };
 }

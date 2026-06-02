@@ -5,6 +5,11 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./register": "./src/register.ts",
+    "./mcp-module": "./src/mcp/module.ts"
+  },
   "scripts": {
     "test": "vitest run"
   },
@@ -13,15 +18,20 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@cinatra-ai/sdk-extensions": "*",
-    "@cinatra-ai/mcp-server": "*",
-    "@cinatra-ai/mcp-client": "*"
+    "@cinatra-ai/sdk-extensions": "*"
   },
   "devDependencies": {
     "vitest": "^4.1.6"
   },
   "cinatra": {
     "apiVersion": "cinatra.ai/v1",
-    "kind": "connector"
+    "kind": "connector",
+    "dependencies": [],
+    "serverEntry": "./register",
+    "requestedHostPorts": [
+      "mcp",
+      "authSession"
+    ],
+    "sdkAbiRange": "^2"
   }
 }
