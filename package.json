@@ -20,6 +20,11 @@
   "peerDependencies": {
     "@cinatra-ai/sdk-extensions": "*"
   },
+  "peerDependenciesMeta": {
+    "@cinatra-ai/sdk-extensions": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "vitest": "^4.1.6"
   },
