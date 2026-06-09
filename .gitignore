@@ -1,0 +1,29 @@
+# --- Dependencies ---
+node_modules/
+
+# --- Build output (tsc emits to dist/ per tsconfig.json) ---
+dist/
+*.tsbuildinfo
+
+# --- Lockfiles (intentionally uncommitted: CI installs with --no-frozen-lockfile) ---
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# --- Testing ---
+coverage/
+
+# --- Packed tarballs (npm pack) ---
+*.tgz
+
+# --- Logs ---
+*.log
+
+# --- Env files & secrets ---
+.env
+.env.*
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
