@@ -31,6 +31,12 @@ import type { EmailConnector } from "./contract";
 
 class EmailConnectorRegistryImpl {
   private entries: Map<string, EmailConnector> = new Map();
+  // Lazy EXTERNAL provider source (transport-registration cutover): connectors that self-registered
+  // behind the `email-send` capability surface here without this facade (or
+  // the host) importing any provider package. Pulled on EVERY read so a
+  // capability teardown is reflected immediately and activation order never
+  // matters. Direct registrations win over external ones with the same id.
+  private externalResolver: (() => readonly EmailConnector[]) | null = null;
 
   register(connector: EmailConnector): void {
     const id = connector.definition.connectorId;
@@ -43,31 +49,54 @@ class EmailConnectorRegistryImpl {
     this.entries.set(id, connector);
   }
 
+  setExternalResolver(resolver: (() => readonly EmailConnector[]) | null): void {
+    this.externalResolver = resolver;
+  }
+
+  private externalProviders(): readonly EmailConnector[] {
+    if (!this.externalResolver) return [];
+    try {
+      return this.externalResolver();
+    } catch {
+      // A broken external resolver must never take down direct registrations.
+      return [];
+    }
+  }
+
   get(id: string): EmailConnector | null {
-    return this.entries.get(id) ?? null;
+    const direct = this.entries.get(id);
+    if (direct) return direct;
+    return (
+      this.externalProviders().find((c) => c.definition.connectorId === id) ?? null
+    );
   }
 
   listAll(): readonly EmailConnector[] {
-    return Array.from(this.entries.values());
+    const out = new Map<string, EmailConnector>();
+    for (const c of this.externalProviders()) out.set(c.definition.connectorId, c);
+    // Direct registrations override external ones with the same id.
+    for (const [id, c] of this.entries) out.set(id, c);
+    return Array.from(out.values());
   }
 
   size(): number {
-    return this.entries.size;
+    return this.listAll().length;
   }
 
   /** @internal Only for tests. */
   _clearForTests(): void {
     this.entries.clear();
+    this.externalResolver = null;
   }
 }
 
 // Anchor the singleton on globalThis so every Next.js compilation in the
 // same Node process shares the same registry instance. The Symbol.for key
-// is namespaced + versioned — future shape changes can bump /v1 to /v2 to
-// avoid collisions with old code paths still living in memory during a
-// rolling restart.
+// is namespaced + versioned — /v2 carries the external-resolver shape (transport-registration cutover)
+// so an old /v1 instance still living in memory during a rolling dev reload
+// can never be read through the new class surface.
 const EMAIL_CONNECTOR_REGISTRY_KEY = Symbol.for(
-  "@cinatra-ai/email-connector:registry/v1",
+  "@cinatra-ai/email-connector:registry/v2",
 );
 type RegistryHolder = { [k: symbol]: EmailConnectorRegistryImpl | undefined };
 const _globalHolder = globalThis as unknown as RegistryHolder;
