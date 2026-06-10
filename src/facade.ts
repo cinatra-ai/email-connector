@@ -41,13 +41,16 @@ import { emailConnectorRegistry } from "./registry";
  * concrete impls at boot via `configureEmailSystem`.
  */
 export interface EmailSystemDeps {
-  /** Resolve which registered connector to use for this send. */
+  /** Resolve which registered connector to use for this send. Returns null
+   *  when no explicit/identity routing step resolves — the facade then falls
+   *  back to the FIRST registered connector (the registry-fallback step lives
+   *  here, not host-side, so the host names no provider). */
   resolveConnectorId: (opts: {
     explicitConnectorId?: string;
     senderIdentityId?: string;
     userId?: string;
     orgId?: string;
-  }) => Promise<string>;
+  }) => Promise<string | null>;
 
   /**
    * Dev-mode override: if dev mode is enabled, rewrite to/cc/bcc to the
@@ -74,6 +77,16 @@ export interface EmailSystemDeps {
       orgId?: string;
     };
   }) => Promise<void>;
+
+  /**
+   * OPTIONAL (transport-registration cutover): lazy source of connectors that self-registered behind the
+   * `email-send` capability (a provider extension's serverEntry doing
+   * `ctx.capabilities.registerProvider("email-send", …)`). Forwarded to the
+   * registry's external resolver so BOTH read paths (get-by-id and listAll)
+   * merge capability providers — neither the facade nor the host imports a
+   * provider package, and a capability teardown is reflected immediately.
+   */
+  resolveConnectorProviders?: () => readonly EmailConnector[];
 }
 
 // CROSS-COMPILATION SINGLETON: same hazard as emailConnectorRegistry —
@@ -104,6 +117,9 @@ function _writeDeps(deps: EmailSystemDeps | null): void {
  */
 export function configureEmailSystem(deps: EmailSystemDeps): void {
   _writeDeps(deps);
+  // Forward the optional capability-provider resolver to the registry so both
+  // read paths merge capability-registered connectors lazily (blog model).
+  emailConnectorRegistry.setExternalResolver(deps.resolveConnectorProviders ?? null);
 }
 
 function getDeps(): EmailSystemDeps {
@@ -116,6 +132,19 @@ function getDeps(): EmailSystemDeps {
     );
   }
   return deps;
+}
+
+/** Routing-chain fallback: the FIRST registered connector. */
+function firstRegisteredConnectorId(): string {
+  const first = emailConnectorRegistry.listAll()[0];
+  if (!first) {
+    throw new Error(
+      "@cinatra-ai/email-connector: no email connector is registered. " +
+        "A provider extension registers one behind the `email-send` capability " +
+        "from its serverEntry (or via registerEmailConnector at boot).",
+    );
+  }
+  return first.definition.connectorId;
 }
 
 function getProvider(id: string): EmailConnector {
@@ -158,12 +187,13 @@ export async function sendEmailThroughSystem(
   },
 ): Promise<EmailSendReceipt> {
   const deps = getDeps();
-  const connectorId = await deps.resolveConnectorId({
-    explicitConnectorId: opts?.connectorId,
-    senderIdentityId: opts?.senderIdentityId,
-    userId: opts?.userId,
-    orgId: opts?.orgId,
-  });
+  const connectorId =
+    (await deps.resolveConnectorId({
+      explicitConnectorId: opts?.connectorId,
+      senderIdentityId: opts?.senderIdentityId,
+      userId: opts?.userId,
+      orgId: opts?.orgId,
+    })) ?? firstRegisteredConnectorId();
   const connector = getProvider(connectorId);
   const msgWithOverride = deps.applyDevModeOverride(msg);
   const receipt = await connector.send(msgWithOverride, { userId: opts?.userId });
@@ -204,12 +234,13 @@ export async function findReplyThroughSystem(opts: {
   orgId?: string;
 }): Promise<EmailReplyMatch | null> {
   const deps = getDeps();
-  const connectorId = await deps.resolveConnectorId({
-    explicitConnectorId: opts.connectorId,
-    senderIdentityId: opts.senderIdentityId,
-    userId: opts.userId,
-    orgId: opts.orgId,
-  });
+  const connectorId =
+    (await deps.resolveConnectorId({
+      explicitConnectorId: opts.connectorId,
+      senderIdentityId: opts.senderIdentityId,
+      userId: opts.userId,
+      orgId: opts.orgId,
+    })) ?? firstRegisteredConnectorId();
   const connector = getProvider(connectorId);
   return connector.findReply({
     providerThreadId: opts.providerThreadId,

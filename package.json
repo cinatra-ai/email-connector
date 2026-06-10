@@ -35,7 +35,8 @@
     "serverEntry": "./register",
     "requestedHostPorts": [
       "mcp",
-      "authSession"
+      "authSession",
+      "capabilities"
     ],
     "sdkAbiRange": "^2"
   }
