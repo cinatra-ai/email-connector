@@ -101,6 +101,22 @@ export function register(ctx: ExtensionHostContext): void {
   }
   configureEmailSystem(deps);
 
+  // Lazy/guarded host-access cutover: the host's trigger-email-send path
+  // (src/lib/trigger-email-send-use-cases.ts) resolves the provider-neutral
+  // send facade through the capability registry instead of dynamic-importing
+  // this package. The impl delegates to the SAME facade configured above
+  // (routing chain + dev-mode recipient override preserved); provider absence
+  // degrades the trigger send with a descriptive error.
+  ctx.capabilities.registerProvider("email-system", {
+    packageName: PACKAGE_NAME,
+    impl: {
+      sendEmail: (
+        message: Parameters<typeof sendEmailThroughSystem>[0],
+        opts: Parameters<typeof sendEmailThroughSystem>[1],
+      ) => sendEmailThroughSystem(message, opts),
+    },
+  });
+
   ctx.mcp.registerTool({
     name: "email_send",
     description:
