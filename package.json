@@ -2,6 +2,10 @@
   "name": "@cinatra-ai/email-connector",
   "version": "0.1.0",
   "license": "Apache-2.0",
+  "files": [
+    "src",
+    "!src/__tests__/"
+  ],
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
