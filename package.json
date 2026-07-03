@@ -5,7 +5,8 @@
   "files": [
     "src",
     "!src/__tests__/"
-  ],
+  ,
+    "cinatra"],
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
