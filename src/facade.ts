@@ -35,6 +35,20 @@ import { emailConnectorRegistry } from "./registry";
 // ---------------------------------------------------------------------------
 
 /**
+ * Soft-provenance correlation forwarded opaquely from the caller through the
+ * facade to the host's sent-email object writer (cinatra#1456). The facade
+ * never interprets these ids — it only threads them from `sendEmailThroughSystem`
+ * opts into `saveSentEmailObject`. Structural match of the host SDK's
+ * `EmailTransportCorrelation`; kept local so this provider-neutral facade takes
+ * no value dependency on the host contract package.
+ */
+export interface EmailTransportCorrelation {
+  campaignId?: string;
+  contactId?: string;
+  runId?: string;
+}
+
+/**
  * Host-side persistence + routing dependencies. The facade is provider-
  * neutral; it knows NOTHING about which DB shape stores email events or
  * which routing policy resolves sender identity → connector. Host wires
@@ -76,6 +90,12 @@ export interface EmailSystemDeps {
       userId?: string;
       orgId?: string;
     };
+    /**
+     * cinatra#1456: campaign / contact / run correlation the caller carried on
+     * the send. Forwarded verbatim to the host writer so a campaign send lands a
+     * fully-correlated sent-email record. Optional + additive.
+     */
+    correlation?: EmailTransportCorrelation;
   }) => Promise<void>;
 
   /**
@@ -184,6 +204,11 @@ export async function sendEmailThroughSystem(
     senderIdentityId?: string;
     userId?: string;
     orgId?: string;
+    /**
+     * cinatra#1456: campaign / contact / run correlation, forwarded verbatim to
+     * the host's sent-email object writer. The facade does not interpret it.
+     */
+    correlation?: EmailTransportCorrelation;
   },
 ): Promise<EmailSendReceipt> {
   const deps = getDeps();
@@ -210,6 +235,10 @@ export async function sendEmailThroughSystem(
         userId: opts?.userId,
         orgId: opts?.orgId,
       },
+      // Thread correlation through to the host writer (cinatra#1456). Present
+      // only when the caller supplied it (campaign sends); absent for plain
+      // MCP / platform sends.
+      ...(opts?.correlation ? { correlation: opts.correlation } : {}),
     }).catch((err) => {
       console.warn(
         `[email-connector] sent-email object write failed (send succeeded): ${err instanceof Error ? err.message : String(err)}`,
