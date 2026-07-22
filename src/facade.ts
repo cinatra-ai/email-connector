@@ -41,11 +41,36 @@ import { emailConnectorRegistry } from "./registry";
  * opts into `saveSentEmailObject`. Structural match of the host SDK's
  * `EmailTransportCorrelation`; kept local so this provider-neutral facade takes
  * no value dependency on the host contract package.
+ *
+ * The facade forwards this envelope VERBATIM (never field-by-field), so an id
+ * the host contract adds is threaded even before this local mirror learns of it.
+ * The fields are enumerated here anyway so the facade's PUBLIC type contract
+ * ADMITS them — a TypeScript caller can pass every correlation id without a cast,
+ * and a future defensive narrowing of the forward can never silently drop one
+ * (cinatra#1947 crash reconciliation depends on submissionId + draftId reaching
+ * persistence; a dropped field there makes a crashed send unconfirmable).
  */
 export interface EmailTransportCorrelation {
+  /** Campaign this send belongs to (soft provenance). */
   campaignId?: string;
+  /** Provider-native contact id — connector-scoped by the record's connectorId. */
   contactId?: string;
+  /** Campaign run-scope id (the fan-out identity frame). */
   runId?: string;
+  /**
+   * The run-scoped test-delivery send submission id (cinatra#1625) — the trusted
+   * per-gate-resume WayFlow task id the `email_test_delivery_run_send` primitive
+   * threads through so a crashed-claim reconciliation (cinatra#1947) can query the
+   * outbound correlation store for THIS submission. Soft provenance; absent on
+   * every non-test-delivery send.
+   */
+  submissionId?: string;
+  /**
+   * The specific draft id this sent-email object materializes (cinatra#1625).
+   * Paired with `submissionId` so reconciliation can confirm EVERY expected draft
+   * of a multi-draft test send was delivered (else `previous_send_unknown`).
+   */
+  draftId?: string;
 }
 
 /**
@@ -205,8 +230,10 @@ export async function sendEmailThroughSystem(
     userId?: string;
     orgId?: string;
     /**
-     * cinatra#1456: campaign / contact / run correlation, forwarded verbatim to
-     * the host's sent-email object writer. The facade does not interpret it.
+     * Soft-provenance correlation (campaign / contact / run — cinatra#1456; plus
+     * the test-delivery submissionId / draftId — cinatra#1625/#1947), forwarded
+     * VERBATIM to the host's sent-email object writer. The facade does not
+     * interpret it.
      */
     correlation?: EmailTransportCorrelation;
   },

@@ -72,6 +72,38 @@ describe("sendEmailThroughSystem — correlation forwarding (cinatra#1456)", () 
     });
   });
 
+  it("threads the test-delivery submissionId / draftId to persistence (#35, cinatra#1947)", async () => {
+    // The run-scoped test-delivery send carries (submissionId, draftId) so the
+    // crash-reconciliation on the cinatra side (email_test_delivery_run_send's
+    // lease-expiry reconcile) can query the persisted sent-email objects for THIS
+    // submission and confirm every expected draft landed. If the facade dropped
+    // either id, reconciliation could never confirm and every crashed send would
+    // resolve to `previous_send_unknown`. This asserts they survive the forward.
+    await sendEmailThroughSystem(
+      { to: ["qa@example.test"], subject: "s", textBody: "t" },
+      {
+        userId: "u-1",
+        correlation: {
+          campaignId: "camp-1",
+          submissionId: "sub-abc-123",
+          draftId: "draft-9",
+        },
+      },
+    );
+    await Promise.resolve();
+    expect(saveCalls).toHaveLength(1);
+    // The whole envelope survives — the campaign id AND the test-delivery pair.
+    expect(saveCalls[0]).toMatchObject({
+      correlation: { campaignId: "camp-1", submissionId: "sub-abc-123", draftId: "draft-9" },
+    });
+    // Explicitly pin the reconciliation-critical pair (a partial forward that
+    // kept campaignId but dropped these would still match a looser assertion).
+    const corr =
+      (saveCalls[0] as { correlation?: Record<string, unknown> }).correlation ?? {};
+    expect(corr.submissionId).toBe("sub-abc-123");
+    expect(corr.draftId).toBe("draft-9");
+  });
+
   it("omits correlation entirely when the caller supplies none (plain send)", async () => {
     await sendEmailThroughSystem({ to: ["a@b.c"], subject: "s", textBody: "t" }, { userId: "u-1" });
     await Promise.resolve();
