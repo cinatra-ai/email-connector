@@ -24,7 +24,7 @@ project's merged pull request and release-tag history.
 
 ## Unreleased
 
-- fix(facade): admit the test-delivery send correlation (`submissionId` / `draftId`) on `EmailTransportCorrelation` so it threads type-safely to the sent-email object writer for crash reconciliation (#35, cinatra#1947)
+- fix(facade): admit the test-delivery send correlation (`submissionId` / `draftId`) on `EmailTransportCorrelation` so it threads type-safely to the sent-email object writer for crash reconciliation (#35)
 - ci: add truthful-attribution-gate (WARN / advisory mode) (#14)
 - ci: adopt the reusable extension->host IoC conformance gate (org-wide rollout) (#15)
 - ci: tag-driven GitHub release on v* (#16)
