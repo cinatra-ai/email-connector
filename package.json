@@ -42,6 +42,7 @@
       "name": "Cinatra"
     },
     "displayName": "Email",
+    "logo": "./cinatra/logo.svg",
     "dependencies": [],
     "serverEntry": "./register",
     "requestedHostPorts": [
