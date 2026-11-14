@@ -70,6 +70,14 @@ const emailSendInputSchema = z.object({
 const nonEmpty = (v: unknown): string | undefined =>
   typeof v === "string" && v.trim().length > 0 ? v : undefined;
 
+// cinatra#3745: `email_send` sends a message on a person's behalf, so its
+// registration declares `outward`: the host holds each call of it during an
+// agent run for the person's recorded decision. It takes free text and no
+// stored item, so it names no subject. A declaration only adds a hold; it never
+// authorizes a call. A host that does not read the field ignores it. Spread
+// from a constant so an SDK config type without the field still accepts it.
+const EMAIL_SEND_OUTWARD = { outward: {} };
+
 export function register(ctx: ExtensionHostContext): void {
   // Self-configure the facade. The host routing service is REQUIRED on a
   // cutover host (it is published by a boot import well before activation);
@@ -125,6 +133,7 @@ export function register(ctx: ExtensionHostContext): void {
       "wrapper around the email-send capability — works with Gmail today and any " +
       "future provider (SMTP, SES, Outlook) the operator registers.",
     inputSchema: emailSendInputSchema,
+    ...EMAIL_SEND_OUTWARD,
     handler: async (rawInput) => {
       const input = emailSendInputSchema.parse(rawInput);
       // Resolve the actor from the TRUSTED request/run context (never from

@@ -55,6 +55,14 @@ const emailSendInputSchema = z.object({
  */
 export type EmailSendActorResolver = () => Promise<{ userId?: string; orgId?: string }>;
 
+// cinatra#3745: `email_send` sends a message on a person's behalf, so its
+// registration declares `outward`: the host holds each call of it during an
+// agent run for the person's recorded decision. It takes free text and no
+// stored item, so it names no subject. A declaration only adds a hold; it never
+// authorizes a call. A host that does not read the field ignores it. Spread
+// from a constant so an SDK config type without the field still accepts it.
+const EMAIL_SEND_OUTWARD = { outward: {} };
+
 export function registerEmailPrimitives(server: EmailToolServer, resolveActor?: EmailSendActorResolver): void {
   server.registerTool(
     "email_send",
@@ -66,6 +74,7 @@ export function registerEmailPrimitives(server: EmailToolServer, resolveActor?: 
         "wrapper around the @cinatra-ai/email-connector facade — works with Gmail today " +
         "and any future provider (SMTP, SES, Outlook) the operator registers.",
       inputSchema: emailSendInputSchema,
+      ...EMAIL_SEND_OUTWARD,
     },
     async (rawInput) => {
       const input = emailSendInputSchema.parse(rawInput);
